@@ -1,55 +1,51 @@
-# main.py
+import json
 import logging
-import sys
-from playwright.sync_api import sync_playwright
-from core.input_handlers import get_city, get_brand_and_category
-from core.url_builder import build_url
-from core.browser_utils import prepare_browser, random_human_delay
-from core.parser import parse_ads
+from core.parser import get_ads
+from constants.categories import BRAND_CATEGORIES
 
-# Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format='[%(asctime)s] %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('parser.log', encoding='utf-8'),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def main():
-    try:
-        brand, category_slug = get_brand_and_category()
-        city = get_city()
-        max_price = input("Максимальная цена (в рублях, можно оставить пустым): ").strip()
+    brand = input("Что ищем (бренд или название)? ").strip().lower()
+    city_input = input("Город (например: Москва, Питер, Ростов): ").strip().lower()
+    max_price = input("Максимальная цена (в рублях, можно оставить пустым): ").strip()
 
-        with_photo_input = input("Показывать только объявления с фото? (да/нет): ").strip().lower()
-        with_photo = with_photo_input in ["да", "д", "yes", "y"]
+    category = None
+    if brand in BRAND_CATEGORIES:
+        print("Уточните категорию:")
+        for idx, cat in enumerate(BRAND_CATEGORIES[brand].keys(), start=1):
+            print(f"{idx}. {cat}")
+        selected = input("Введите номер категории: ").strip()
+        try:
+            selected_idx = int(selected) - 1
+            category = list(BRAND_CATEGORIES[brand].keys())[selected_idx]
+        except:
+            print("⚠ Категория не выбрана — поиск будет по всему сайту.")
 
-        logger.info(f"Начало парсинга: бренд='{brand}', город='{city}', макс.цена='{max_price}', фото только='{with_photo}'")
-        url = build_url(city, brand, category_slug, max_price, with_photo)
+    with_photos = input("Только с фото? (да/нет): ").strip().lower() == "да"
 
-        logger.info(f"Сформирован URL для парсинга: {url}")
-        print(f"Ищу товары по ссылке: {url}")
+    results = get_ads(
+        brand=brand,
+        category=category,
+        city_input=city_input,
+        max_price=max_price,
+        with_photos=with_photos
+    )
 
-        with sync_playwright() as p:
-            browser, page = prepare_browser(p, url)
-            data = parse_ads(page, logger)
+    print(f"Найдено объявлений: {len(results)}")
 
-            with open("avito.json", "w", encoding="utf-8") as f:
-                import json
-                json.dump(data, f, ensure_ascii=False, indent=4)
+    for ad in results:
+        print(f"Название: {ad['title']}")
+        print(f"Цена: {ad['price']}")
+        print(f"Ссылка: {ad['link']}")
+        print("-" * 40)
 
-            logger.info(f"Парсинг завершен. Сохранено {len(data)} объявлений в avito.json")
-            print("Готово, объявления сохранены!")
-            browser.close()
+    with open("avito_result.json", "w", encoding="utf-8") as f:
+        json.dump(results, f, ensure_ascii=False, indent=4)
 
-    except Exception as e:
-        logger.critical("Критическая ошибка в основном потоке", exc_info=True)
-        print(f"Произошла критическая ошибка: {str(e)}")
-        if 'browser' in locals():
-            browser.close()
+    print("Готово, данные сохранены в avito_result.json")
 
 if __name__ == "__main__":
     main()

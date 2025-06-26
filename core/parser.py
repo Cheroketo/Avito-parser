@@ -1,45 +1,61 @@
-import random
-from core.browser_utils import random_human_delay
 
-def parse_ads(page, logger):
-    logger.info("Ожидаем загрузки объявлений...")
-    page.wait_for_selector('[data-marker="catalog-serp"]', timeout=60000)
-    page.wait_for_timeout(3000)
+import logging
+from urllib.parse import quote
+from constants.categories import BRAND_CATEGORIES
+from constants.cities import CITY_TRANSLATIONS
+from core.browser_utils import launch_and_get_page, random_human_delay
 
-    page.mouse.move(random.randint(100, 800), random.randint(100, 600))
-    page.mouse.wheel(0, random.randint(200, 800))
-    random_human_delay()
 
-    ads = page.locator('[data-marker="item"]')
-    count = ads.count()
-    if count == 0:
-        ads = page.locator('div.iva-item-root-XBsVL')
+def get_ads(brand, category=None, city_input="москва", max_price="", with_photos=False, pages=1):
+    logger = logging.getLogger(__name__)
+    city = CITY_TRANSLATIONS.get(city_input.lower())
+    if not city:
+        logger.warning(f"Неизвестный город '{city_input}', используется 'moskva'")
+        city = "moskva"
+
+    encoded_query = quote(brand)
+    category_slug = BRAND_CATEGORIES.get(brand, {}).get(category, "")
+
+    if category_slug:
+        url = f"https://www.avito.ru/{city}/{category_slug}?q={encoded_query}"
+    else:
+        url = f"https://www.avito.ru/{city}?q={encoded_query}"
+
+    if max_price.isdigit():
+        url += f"&pmax={max_price}"
+
+    if with_photos:
+        url += "&withImagesOnly=1"
+
+    logger.info(f"Парсим URL: {url}")
+
+    try:
+        browser, page = launch_and_get_page(url)
+        page.wait_for_selector('[data-marker="catalog-serp"]', timeout=60000)
+        ads = page.locator('[data-marker="item"]')
+
         count = ads.count()
+        results = []
 
-    logger.info(f"Найдено объявлений: {count}")
-    print(f"Найдено объявлений: {count}")
+        for i in range(count):
+            try:
+                ad = ads.nth(i)
+                title = ad.locator('[itemprop="name"]').inner_text()
+                price = ad.locator('[data-marker="item-price"]').inner_text()
+                link = ad.locator('a[data-marker="item-title"]').get_attribute("href")
+                results.append({
+                    "title": title.strip(),
+                    "price": price.strip(),
+                    "link": f"https://www.avito.ru{link.strip()}"
+                })
+                random_human_delay(0.3, 0.8)
+            except Exception as e:
+                logger.warning(f"Ошибка парсинга объявления {i}: {e}")
 
-    data = []
-    for i in range(count):
-        try:
-            ad = ads.nth(i)
-            title = ad.locator('[itemprop="name"]').inner_text()
-            price = ad.locator('[data-marker="item-price"]').inner_text()
-            link = ad.locator('a[data-marker="item-title"]').get_attribute("href")
+        browser.close()
+        return results
 
-            item_data = {
-                "title": title.strip(),
-                "price": price.strip(),
-                "link": "https://www.avito.ru" + link.strip() if link else None
-            }
-            data.append(item_data)
+    except Exception as e:
+        logger.error(f"Не удалось получить данные: {e}")
+        return []
 
-            logger.info(f"Объявление {i+1}/{count}: {item_data['title']} - {item_data['price']}")
-            print(f"Название: {title}\nЦена: {price}\nСсылка: https://www.avito.ru{link}\n" + "-" * 40)
-
-            random_human_delay()
-
-        except Exception as e:
-            logger.error(f"Ошибка при парсинге объявления {i}: {str(e)}", exc_info=True)
-
-    return data
