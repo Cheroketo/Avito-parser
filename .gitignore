@@ -13,9 +13,9 @@ data/
 # Игнорировать файлы IDE
 .idea/
 *.iml
-*.ipynb_checkpoints/
+.ipynb_checkpoints/
 *.log
+
 # Игнорировать другие файлы
 .DS_Store
-Thumbs.db
 .env
