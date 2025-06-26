@@ -9,14 +9,13 @@ __pycache__/
 
 # Игнорировать данные
 data/
-logs/
-avito_ads.json
 
 # Игнорировать файлы IDE
-.idea
+.idea/
 *.iml
 *.ipynb_checkpoints/
 *.log
 # Игнорировать другие файлы
 .DS_Store
 Thumbs.db
+.env
